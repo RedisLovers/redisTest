@@ -1,15 +1,12 @@
-import User from '../models/user.model';
+import rc from '../../config/redis';
+import uuid from 'uuid';
+import kue from 'kue';
+const queue = kue.createQueue();
 
 /**
  * Load user and append to req.
  */
 function load(req, res, next, id) {
-  User.get(id)
-    .then((user) => {
-      req.user = user; // eslint-disable-line no-param-reassign
-      return next();
-    })
-    .catch(e => next(e));
 }
 
 /**
@@ -17,7 +14,7 @@ function load(req, res, next, id) {
  * @returns {User}
  */
 function get(req, res) {
-  return res.json(req.user);
+  
 }
 
 /**
@@ -26,15 +23,36 @@ function get(req, res) {
  * @property {string} req.body.mobileNumber - The mobileNumber of user.
  * @returns {User}
  */
-function create(req, res, next) {
-  const user = new User({
-    username: req.body.username,
-    mobileNumber: req.body.mobileNumber
-  });
+async function create(req, res, next) {
+  const newUuid = uuid.v1();
+  try{
+    console.log('Creation started: ' + Date.now());
+    console.time('Create user in redis');
+    const replies = await rc.multi()
+                          .hmset(`user:${newUuid}`, "name", `${newUuid}`, 'createdBy', 'Timur', 'createdAt', new Date(), 'updatedBy', '', 'updatedAt', '')
+                          .lpush('users', newUuid)
+                          .execAsync();
+    console.timeEnd('Create user');
 
-  user.save()
-    .then(savedUser => res.json(savedUser))
-    .catch(e => next(e));
+    let job = queue.create('usercreate', {
+        id: newUuid,
+        name: newUuid,
+        createdBy: 'Timur',
+        createdAt: null,
+        updatedBy: null,
+        updatedAt: null
+    }).save( function(err){
+      if( !err ){
+        return res.sendStatus(200);
+      }
+      res.sendStatus(500);
+    });
+    
+  }
+  catch(err){
+    res.sendStatus(500);
+  }
+  
 }
 
 /**
@@ -44,13 +62,7 @@ function create(req, res, next) {
  * @returns {User}
  */
 function update(req, res, next) {
-  const user = req.user;
-  user.username = req.body.username;
-  user.mobileNumber = req.body.mobileNumber;
-
-  user.save()
-    .then(savedUser => res.json(savedUser))
-    .catch(e => next(e));
+  
 }
 
 /**
@@ -59,11 +71,24 @@ function update(req, res, next) {
  * @property {number} req.query.limit - Limit number of users to be returned.
  * @returns {User[]}
  */
-function list(req, res, next) {
-  const { limit = 50, skip = 0 } = req.query;
-  User.list({ limit, skip })
-    .then(users => res.json(users))
-    .catch(e => next(e));
+async function list(req, res, next) {
+  try{
+    const ids = await rc.lrangeAsync('users', 0, 50);
+    let batch = rc.batch();
+    ids.forEach(function(id) {
+      batch = batch.hgetall(`user:${id}`);
+    });
+    console.time('GetList');
+    const users = await batch.execAsync();
+    console.timeEnd('GetList');
+
+    res.status(200).json(users);
+  }
+  catch(err){
+    res.sendStatus(500);
+  }
+
+  
 }
 
 /**
@@ -71,10 +96,7 @@ function list(req, res, next) {
  * @returns {User}
  */
 function remove(req, res, next) {
-  const user = req.user;
-  user.remove()
-    .then(deletedUser => res.json(deletedUser))
-    .catch(e => next(e));
+  
 }
 
 export default { load, get, create, update, list, remove };
