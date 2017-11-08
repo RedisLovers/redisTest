@@ -13,8 +13,16 @@ function load(req, res, next, id) {
  * Get user
  * @returns {User}
  */
-function get(req, res) {
-  
+async function get(req, res) {
+  try{
+    console.time('Get one user from redis');
+    const user = await rc.hgetallAsync(`user:${req.params.id}`);
+    console.timeEnd('Get one user from redis');
+    res.status(200).json(user);
+  }
+  catch(err){
+    res.sendStatus(500);
+  }
 }
 
 /**
@@ -26,24 +34,24 @@ function get(req, res) {
 async function create(req, res, next) {
   const newUuid = uuid.v1();
   try{
-    console.log('Creation started: ' + Date.now());
     console.time('Create user in redis');
     const replies = await rc.multi()
-                          .hmset(`user:${newUuid}`, "name", `${newUuid}`, 'createdBy', 'Timur', 'createdAt', new Date(), 'updatedBy', '', 'updatedAt', '')
+                          .hmset(`user:${newUuid}`, 'id', newUuid, "name", req.body.name, 'createdBy', 'Timur', 'createdAt', new Date(), 'updatedBy', '', 'updatedAt', '')
                           .lpush('users', newUuid)
                           .execAsync();
-    console.timeEnd('Create user');
+    console.timeEnd('Create user in redis');
 
-    let job = queue.create('usercreate', {
+    const user = {
         id: newUuid,
-        name: newUuid,
+        name: req.body.name,
         createdBy: 'Timur',
         createdAt: null,
         updatedBy: null,
         updatedAt: null
-    }).save( function(err){
+    }
+    const job = queue.create('usercreate', user).save( function(err){
       if( !err ){
-        return res.sendStatus(200);
+        return res.status(200).json(user);
       }
       res.sendStatus(500);
     });
@@ -61,8 +69,26 @@ async function create(req, res, next) {
  * @property {string} req.body.mobileNumber - The mobileNumber of user.
  * @returns {User}
  */
-function update(req, res, next) {
-  
+async function update(req, res, next) {
+  try{
+    console.log(req.body)
+    console.time("Update one record in redis");
+    const results = await rc.batch()
+                      .hmset(`user:${req.params.id}`, 'name', req.body.name, 'updatedBy', 'Timur', 'updatedAt', new Date())
+                      .hgetall(`user:${req.params.id}`)
+                      .execAsync();
+    console.timeEnd("Update one record in redis");
+    const user = results[1];
+    const job = queue.create('userupdate', user).save( function(err){
+      if( !err ){
+        return res.status(200).json(user);
+      }
+      res.sendStatus(500);
+    });
+  }
+  catch(err){
+    res.sendStatus(500).json(err);;
+  }
 }
 
 /**
@@ -78,9 +104,9 @@ async function list(req, res, next) {
     ids.forEach(function(id) {
       batch = batch.hgetall(`user:${id}`);
     });
-    console.time('GetList');
+    console.time('Get List of users from redis');
     const users = await batch.execAsync();
-    console.timeEnd('GetList');
+    console.timeEnd('Get List of users from redis');
 
     res.status(200).json(users);
   }
@@ -95,8 +121,25 @@ async function list(req, res, next) {
  * Delete user.
  * @returns {User}
  */
-function remove(req, res, next) {
-  
+async function remove(req, res, next) {
+  try{
+    const id = req.params.id;
+    console.time('Delete user from redis');
+    const replies = await rc.multi()
+                          .del(`user:${id}`)
+                          .lrem('users', 0, id)
+                          .execAsync();
+    console.timeEnd('Delete user from redis');
+    const job = queue.create('userdelete', id).save( function(err){
+      if( !err ){
+        return res.sendStatus(204);
+      }
+      res.sendStatus(500);
+    });
+  }
+  catch(err){
+    res.sendStatus(500);
+  }
 }
 
 export default { load, get, create, update, list, remove };
