@@ -10,9 +10,8 @@ const envVarsSchema = Joi.object({
     .default('development'),
   PORT: Joi.number()
     .default(4040),
-  JWT_SECRET: Joi.string().required()
-    .description('JWT Secret required to sign'),
   SQLSERVER_CONNECTION_STRING: Joi.string().required().description("SQL Server connection"),
+  REDIS_CONNECTION_STRING: Joi.string().required().description("Redis Server connection"),
 }).unknown()
   .required();
 
@@ -22,14 +21,10 @@ if (error) {
 }
 
 const config = {
-  env: envVars.NODE_ENV,
+  sqlServerConnectionString: envVars.SQLSERVER_CONNECTION_STRING,
+  redisConnectionString: envVars.REDIS_CONNECTION_STRING,
   port: envVars.PORT,
-  jwtSecret: envVars.JWT_SECRET,
-  mongo: {
-    host: envVars.MONGO_HOST,
-    port: envVars.MONGO_PORT
-  },
-  sqlServerConnectionString: envVars.SQLSERVER_CONNECTION_STRING
+  env: envVars.NODE_ENV
 };
 
 export default config;

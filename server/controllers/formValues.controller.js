@@ -1,7 +1,6 @@
 import rc from '../../config/redis';
 import uuid from 'uuid';
-import kue from 'kue';
-const queue = kue.createQueue();
+import queue from '../../config/kue';
 
 /**
  * Load user and append to req.
@@ -15,13 +14,26 @@ function load(req, res, next, id) {
  */
 async function get(req, res) {
   try{
-    console.time('Get one user from redis');
-    const user = await rc.hgetallAsync(`user:${req.params.id}`);
-    console.timeEnd('Get one user from redis');
-    res.status(200).json(user);
+    console.time("Get values");
+    const ffvids = await rc.smembersAsync(`FFVIds:${req.params.formId}`);
+    let batch = rc.batch();
+    ffvids.forEach(id=>{
+      batch.hgetall(`FFV:${id}`);
+    });
+    const values = await batch.execAsync();
+    let FFDs = [];
+    values.forEach(val => {
+      let op = rc.hgetallAsync(`FFD:${val.FormFieldDefinitionId}`).then(def => {
+        val.formDefinition = def;
+      });
+      FFDs.push(op);
+    })
+    await Promise.all(FFDs);
+    console.timeEnd("Get values");
+    res.status(200).json(values);
   }
   catch(err){
-    res.sendStatus(500);
+    res.status(500).json(err);
   }
 }
 
@@ -55,12 +67,12 @@ async function create(req, res, next) {
       }
       res.sendStatus(500);
     });
-    
+
   }
   catch(err){
     res.sendStatus(500);
   }
-  
+
 }
 
 /**
@@ -114,7 +126,7 @@ async function list(req, res, next) {
     res.sendStatus(500);
   }
 
-  
+
 }
 
 /**
