@@ -83,17 +83,12 @@ async function create(req, res, next) {
  */
 async function update(req, res, next) {
   try{
-    console.log(req.body)
     console.time("Update one record in redis");
-    const results = await rc.batch()
-                      .hmset(`user:${req.params.id}`, 'name', req.body.name, 'updatedBy', 'Timur', 'updatedAt', new Date())
-                      .hgetall(`user:${req.params.id}`)
-                      .execAsync();
+    const results = await rc.hmsetAsync(`FFV:${req.params.formId}`, req.body);
     console.timeEnd("Update one record in redis");
-    const user = results[1];
-    const job = queue.create('userupdate', user).save( function(err){
+    const job = queue.create('FFV:update', req.body).save( function(err){
       if( !err ){
-        return res.status(200).json(user);
+        return res.sendStatus(200);
       }
       res.sendStatus(500);
     });
