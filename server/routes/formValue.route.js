@@ -19,6 +19,9 @@ router.route('/:formId')
 router.route('/:fieldId') /** PUT /api/form-values/:formId - Update user */
   .put(formValuesCtrl.update)
 
+router.route('/') /** PUT /api/form-values - Update user */
+	.put(formValuesCtrl.updateMultiple)
+
   /** DELETE /api/form-values/:formId - Delete user */
   // .delete(faormValuesCtrl.remove);
 
