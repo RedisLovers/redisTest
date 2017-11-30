@@ -1,28 +1,14 @@
 import kue from 'kue';
-import Sequelize from 'sequelize';
 import config from './config/config';
-
+import FFV from './server/models/formFieldValue.model'
 const queue = kue.createQueue({
     redis: config.redisConnectionString
 });
-console.log(config.sqlServerConnectionString);
-const sequelize = new Sequelize(config.sqlServerConnectionString);
-sequelize.authenticate().then(() => {
-  console.log('Connection has been established successfully.');
-})
-.catch(err => {
-  console.error('Unable to connect to the database:', err);
-});
-const FFV = sequelize.define('FormFieldValue', {
-    FormFieldValueId: { type: Sequelize.UUIDV1, primaryKey: true},
-    FormId: Sequelize.STRING,
-    FormFieldDefinitionId: Sequelize.STRING,
-    ValueString: Sequelize.STRING,//Actually a DATE, but STRING prevents conflicts with SQL server DATETIME
-},
-{
-    timestamps: false,
-    freezeTableName: true,
-    schema: 'iep'
+
+kue.Job.range(0, -1, 'desc', (err, jobs) => {
+    jobs.forEach(job => {
+        job.remove();
+    })
 });
 
 queue.process('FFV:update', function(job, done){
@@ -32,10 +18,11 @@ queue.process('FFV:update', function(job, done){
 function updateFFV(val, done){
     console.time('Update FFV');
     const id = val.FormFieldValueId;
+    console.log(val);
     delete val.FormFieldValueId;
     FFV.update({...val},
-    {where: {FormFieldValueId: id}}
-    )
+        {where: {FormFieldValueId: id}
+    })
     .then(res => {
         console.timeEnd('Update FFV');
             done();
