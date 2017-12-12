@@ -12,6 +12,7 @@ kue.Job.range(0, -1, 'desc', (err, jobs) => {
     })
 });
 
+
 queue.process('FFV:update', function(job, done){
     updateFFV(job.data, done);
 });
@@ -56,3 +57,5 @@ function updateFFVMultiple(values, done) {
         done();
     });
 }
+
+export default queue;
